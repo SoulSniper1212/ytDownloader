@@ -39,6 +39,7 @@ const CONSTANTS = {
 		EXTRACT_SELECTION: "extractSelection",
 		EXTRACT_QUALITY_SELECT: "extractQualitySelect",
 		// Advanced Options
+		CUSTOM_ARGS_INPUT: "customArgsInput", // Add this line
 		START_TIME: "min-time",
 		END_TIME: "max-time",
 		MIN_SLIDER: "min-slider",
@@ -448,7 +449,8 @@ class YtDownloaderApp {
 			if (
 				event.ctrlKey &&
 				event.key === "v" &&
-				document.activeElement.tagName !== "INPUT"
+				document.activeElement.tagName !== "INPUT" &&
+				document.activeElement.tagName !== "TEXTAREA"
 			) {
 				this.pasteAndGetInfo();
 			}
@@ -779,7 +781,6 @@ class YtDownloaderApp {
 			format_id = videoFid;
 			audioForVideoFormat_id = audioFid;
 
-			// Determine final container extension
 			const finalAudioExt = audioExt === "webm" ? "opus" : audioExt;
 			ext =
 				(videoExt === "mp4" && finalAudioExt === "opus") ||
@@ -788,7 +789,6 @@ class YtDownloaderApp {
 					? "mkv"
 					: videoExt;
 
-			// Determine audio format string for yt-dlp
 			audioFormat =
 				audioForVideoFormat_id === "none"
 					? ""
@@ -803,7 +803,6 @@ class YtDownloaderApp {
 				uiSnapshot.extractFormat;
 		}
 
-		// Sanitize filename
 		const invalidChars =
 			platform() === "win32" ? /[<>:"/\\|?*[\]`#]/g : /["/`#]/g;
 		let finalFilename = title
@@ -823,13 +822,10 @@ class YtDownloaderApp {
 			this.state.downloadDir,
 			`${finalFilename}.${ext}`
 		)}"`;
-		const commonArgs = [
+
+		const baseArgs = [
 			"--no-playlist",
-			// TODO: only embed when range selection isn't used
-			// "--embed-chapters",
 			"--no-mtime",
-			rangeOption,
-			rangeCmd,
 			browserForCookies ? "--cookies-from-browser" : "",
 			browserForCookies,
 			proxy ? "--proxy" : "",
@@ -838,10 +834,10 @@ class YtDownloaderApp {
 			configPath ? `"${configPath}"` : "",
 			"--ffmpeg-location",
 			`"${this.state.ffmpegPath}"`,
-			`"${url}"`,
 		].filter(Boolean);
 
-		let downloadArgs;
+		let downloadArgs = [];
+
 		if (type === "extract") {
 			downloadArgs = [
 				"-x",
@@ -851,21 +847,27 @@ class YtDownloaderApp {
 				uiSnapshot.extractQuality,
 				"-o",
 				outputPath,
-				...commonArgs,
+				...baseArgs,
 			];
 		} else {
 			const formatString =
 				type === "video" ? `${format_id}${audioFormat}` : format_id;
-			downloadArgs = [
-				"-f",
-				formatString,
-				"-o",
-				outputPath,
-				subs,
-				subLangs,
-				...commonArgs,
-			];
+			downloadArgs = ["-f", formatString, "-o", outputPath, ...baseArgs];
 		}
+
+		if (subs) downloadArgs.push(subs);
+		if (subLangs) downloadArgs.push(subLangs);
+		if (rangeOption) downloadArgs.push(rangeOption, rangeCmd);
+
+		const customArgsString = $(
+			CONSTANTS.DOM_IDS.CUSTOM_ARGS_INPUT
+		).value.trim();
+		if (customArgsString) {
+			const customArgs = customArgsString.split(/\s+/);
+			downloadArgs.push(...customArgs);
+		}
+
+		downloadArgs.push(`"${url}"`);
 
 		return {downloadArgs, finalFilename, finalExt: ext};
 	}
